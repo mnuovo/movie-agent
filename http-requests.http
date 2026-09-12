@@ -1,0 +1,55 @@
+###
+# Movie-Agent local endpoint checks
+# Use this file with IntelliJ HTTP Client.
+
+@baseUrl = http://localhost:8080
+
+### 1) Health check
+GET {{baseUrl}}/health
+Accept: application/json
+
+###
+# 2) TMDB movie by id (success example)
+GET {{baseUrl}}/tmdb/movie/11
+Accept: application/json
+
+###
+# 3) TMDB movie by id (known not found example)
+GET {{baseUrl}}/tmdb/movie/1
+Accept: application/json
+
+###
+# 4) Chat stream (SSE)
+# Tip: this returns text/event-stream chunks.
+GET {{baseUrl}}/chat/stream?message=Find%20top%20rated%20Matrix%20movies
+Accept: text/event-stream
+
+###
+# 5) Typed movie search endpoint (DTO request/response)
+POST {{baseUrl}}/chat/search
+Content-Type: application/json
+Accept: application/json
+
+{
+  "query": "The Matrix",
+  "include_adult": false,
+  "language": "en-US",
+  "page": 1
+}
+
+###
+# 6) Typed search with optional filters
+POST {{baseUrl}}/chat/search
+Content-Type: application/json
+Accept: application/json
+
+{
+  "query": "The Matrix",
+  "include_adult": false,
+  "language": "en-US",
+  "primary_release_year": "1999",
+  "page": 1,
+  "region": "US",
+  "year": "1999"
+}
+

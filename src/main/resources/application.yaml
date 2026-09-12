@@ -1,0 +1,24 @@
+spring:
+  application:
+    name: movie-agent
+  config:
+    # Load local developer secrets from project root if present.
+    import: optional:file:.env[.properties]
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        model: llama3.1:8b # Or your preferred local model
+
+# Custom properties for your TMDB integration
+tmdb:
+  api:
+    base-url: https://api.themoviedb.org/3
+    # Preferred auth (works across TMDB v3/v4): API Read Access Token
+    read-access-token: ${TMDB_READ_ACCESS_TOKEN:}
+    # Backward-compatible fallback for v3 query-param authentication
+    api-key: ${TMDB_API_KEY:}
+    # Preferred secure way behind corporate proxies: custom truststore for proxy CA
+    trust-store-path: ${TMDB_TRUST_STORE_PATH:}
+    trust-store-password: ${TMDB_TRUST_STORE_PASSWORD:}
+    trust-store-type: ${TMDB_TRUST_STORE_TYPE:PKCS12}

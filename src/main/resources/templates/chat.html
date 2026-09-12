@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Movie-Agent UI</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' font-size='52'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+    <style>
+        .thinking-dots {
+            display: inline-flex;
+            gap: 0.2rem;
+            margin-left: 0.35rem;
+            vertical-align: middle;
+        }
+
+        .thinking-dots span {
+            width: 0.32rem;
+            height: 0.32rem;
+            border-radius: 9999px;
+            background-color: rgb(148 163 184);
+            animation: thinking-bounce 1s infinite ease-in-out;
+        }
+
+        .thinking-dots span:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .thinking-dots span:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        @keyframes thinking-bounce {
+            0%, 80%, 100% {
+                transform: translateY(0);
+                opacity: 0.45;
+            }
+            40% {
+                transform: translateY(-0.22rem);
+                opacity: 1;
+            }
+        }
+
+        .message-enter {
+            animation: message-pop 180ms ease-out;
+        }
+
+        @keyframes message-pop {
+            from {
+                opacity: 0;
+                transform: translateY(0.35rem) scale(0.985);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .agent-bubble {
+            transition: box-shadow 180ms ease, border-color 180ms ease;
+        }
+
+        .agent-bubble.is-streaming {
+            border-color: rgb(79 70 229 / 0.65);
+            box-shadow: 0 0 0 1px rgb(79 70 229 / 0.08), 0 0 24px rgb(79 70 229 / 0.12);
+        }
+
+        .stream-content {
+            line-height: 1.55;
+        }
+
+        .stream-content p,
+        .stream-content ul,
+        .stream-content ol,
+        .stream-content h1,
+        .stream-content h2,
+        .stream-content h3,
+        .stream-content blockquote {
+            margin-top: 0.45rem;
+            margin-bottom: 0.45rem;
+        }
+
+        .stream-content ul,
+        .stream-content ol {
+            padding-left: 1.2rem;
+        }
+
+        .stream-content strong {
+            color: rgb(224 231 255);
+            font-weight: 700;
+        }
+
+        .stream-content a {
+            color: rgb(129 140 248);
+            text-decoration: underline;
+        }
+
+        .stream-content code {
+            background: rgb(15 23 42);
+            border-radius: 0.25rem;
+            padding: 0.08rem 0.25rem;
+        }
+
+        .stream-content pre {
+            background: rgb(15 23 42);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            overflow-x: auto;
+        }
+
+        .stream-content.is-streaming::after {
+            content: "▍";
+            display: inline-block;
+            margin-left: 0.15rem;
+            color: rgb(165 180 252);
+            animation: caret-blink 1s steps(2, start) infinite;
+        }
+
+        @keyframes caret-blink {
+            0%, 49% {
+                opacity: 1;
+            }
+            50%, 100% {
+                opacity: 0;
+            }
+        }
+
+        .send-button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col justify-between font-sans">
+
+<header class="bg-slate-800 border-b border-slate-700 p-4 shadow-md text-center">
+    <h1 class="text-xl font-bold tracking-wide text-indigo-400">🎬 Movie-Agent</h1>
+    <p class="text-xs text-slate-400">Powered by Spring AI + Ollama + TMDB</p>
+</header>
+
+<main id="chat-window" class="flex-1 overflow-y-auto p-4 max-w-3xl w-full mx-auto space-y-4">
+    <div class="flex justify-start">
+        <div class="bg-slate-800 border border-slate-700 rounded-lg p-3 max-w-[85%] text-sm shadow-sm">
+            Hello! I am your <strong>Movie-Agent</strong>. Ask me to look up any movie, analyze genres, or find top-rated titles!
+        </div>
+    </div>
+</main>
+
+<footer class="bg-slate-800 border-t border-slate-700 p-4 sticky bottom-0">
+    <div class="max-w-3xl mx-auto">
+        <form id="chat-form" class="flex gap-2">
+            <input type="text"
+                   name="message"
+                   placeholder="Ask about movies (e.g., Show me ratings for Inception)..."
+                   required
+                   aria-label="Movie question"
+                   class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors">
+
+            <button type="submit"
+                    class="send-button bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-sm px-5 py-2 rounded-lg shadow-md transition-colors">
+                Send
+            </button>
+        </form>
+    </div>
+</footer>
+
+<script>
+function createUserBubble(message) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex justify-end message-enter";
+
+    const bubble = document.createElement("div");
+    bubble.className = "bg-indigo-600 text-white rounded-lg p-3 max-w-[85%] text-sm shadow-sm";
+    bubble.textContent = message;
+
+    wrapper.appendChild(bubble);
+    return wrapper;
+}
+
+function createAgentBubble(id) {
+    const wrapper = document.createElement("div");
+    wrapper.className = "flex justify-start message-enter";
+
+    const bubble = document.createElement("div");
+    bubble.id = id;
+    bubble.className = "agent-bubble bg-slate-800 border border-slate-700 rounded-lg p-3 max-w-[85%] text-sm shadow-sm whitespace-pre-wrap";
+
+    const indicator = document.createElement("div");
+    indicator.className = "thinking-indicator text-slate-400";
+    indicator.innerHTML = 'Writing <span class="thinking-dots"><span></span><span></span><span></span></span>';
+
+    const content = document.createElement("div");
+    content.id = id + "-content";
+    content.className = "stream-content is-streaming";
+
+    bubble.appendChild(indicator);
+    bubble.appendChild(content);
+    wrapper.appendChild(bubble);
+
+    return wrapper;
+}
+
+function normalizeStreamText(text) {
+    return text
+        .replace(/\r/g, "")
+        .replace(/(^|\n)data:\s?/g, "$1")
+        .trimStart();
+}
+
+function renderMarkdown(target) {
+    const normalized = normalizeStreamText(target.textContent || "");
+    if (!normalized) {
+        return;
+    }
+
+    if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
+        target.textContent = normalized;
+        return;
+    }
+
+    const unsafeHtml = marked.parse(normalized, { breaks: true });
+    target.innerHTML = DOMPurify.sanitize(unsafeHtml);
+}
+
+function scrollChatToBottom() {
+    const chatWindow = document.getElementById("chat-window");
+    if (chatWindow) {
+        chatWindow.scrollTop = chatWindow.scrollHeight;
+    }
+}
+
+function setStreamingState(isStreaming) {
+    const form = document.getElementById("chat-form");
+    const input = form ? form.querySelector('input[name="message"]') : null;
+    const button = form ? form.querySelector('button[type="submit"]') : null;
+
+    if (input) {
+        input.disabled = isStreaming;
+    }
+
+    if (button) {
+        button.disabled = isStreaming;
+        button.textContent = isStreaming ? "Sending..." : "Send";
+    }
+}
+
+function appendStreamChunk(target, chunk) {
+    if (!chunk) {
+        return;
+    }
+
+    target.textContent += chunk;
+
+    const bubbleId = target.id.replace(/-content$/, "");
+    const indicator = document.querySelector("#" + bubbleId + " .thinking-indicator");
+    if (indicator && target.textContent.trim().length > 0) {
+        indicator.style.display = "none";
+    }
+
+    const bubble = document.getElementById(bubbleId);
+    if (bubble) {
+        bubble.classList.add("is-streaming");
+    }
+
+    target.classList.add("is-streaming");
+    scrollChatToBottom();
+}
+
+function consumeSseBlock(block, target) {
+    if (!block.trim()) {
+        return;
+    }
+
+    const dataLines = block
+        .split(/\n/)
+        .filter(function (line) {
+            return line.startsWith("data:");
+        })
+        .map(function (line) {
+            return line.slice(5).replace(/^\s?/, "");
+        });
+
+    if (dataLines.length > 0) {
+        appendStreamChunk(target, dataLines.join("\n"));
+    }
+}
+
+async function streamAssistantReply(message, target) {
+    const response = await fetch("/chat/stream?" + new URLSearchParams({ message: message }), {
+        method: "GET",
+        headers: {
+            Accept: "text/event-stream"
+        }
+    });
+
+    if (!response.ok || !response.body) {
+        throw new Error("Unable to stream the assistant response.");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+        const result = await reader.read();
+        if (result.done) {
+            break;
+        }
+
+        buffer += decoder.decode(result.value, { stream: true });
+
+        const blocks = buffer.split(/\n\n/);
+        buffer = blocks.pop() || "";
+        blocks.forEach(function (block) {
+            consumeSseBlock(block, target);
+        });
+    }
+
+    buffer += decoder.decode();
+    if (buffer) {
+        consumeSseBlock(buffer, target);
+    }
+}
+
+document.getElementById("chat-form").addEventListener("submit", async function (evt) {
+    evt.preventDefault();
+
+    const form = evt.currentTarget;
+    const queryInput = form.querySelector('input[name="message"]');
+    const chatWindow = document.getElementById("chat-window");
+    const message = queryInput ? queryInput.value.trim() : "";
+
+    if (!message) {
+        return;
+    }
+
+    chatWindow.appendChild(createUserBubble(message));
+
+    const agentBubbleId = "stream-" + Date.now();
+    chatWindow.appendChild(createAgentBubble(agentBubbleId));
+
+    const streamTarget = document.getElementById(agentBubbleId + "-content");
+    streamTarget.textContent = "";
+    streamTarget.classList.add("is-streaming");
+
+    const bubble = document.getElementById(agentBubbleId);
+    if (bubble) {
+        bubble.classList.add("is-streaming");
+    }
+
+    scrollChatToBottom();
+    form.reset();
+    setStreamingState(true);
+
+
+    try {
+        await streamAssistantReply(message, streamTarget);
+    } catch (error) {
+        const fallbackMessage = error instanceof Error ? error.message : "Something went wrong while streaming the response.";
+        appendStreamChunk(streamTarget, fallbackMessage);
+    } finally {
+        renderMarkdown(streamTarget);
+        streamTarget.classList.remove("is-streaming");
+
+        if (bubble) {
+            bubble.classList.remove("is-streaming");
+        }
+
+        setStreamingState(false);
+        if (queryInput) {
+            queryInput.focus();
+        }
+    }
+});
+
+const observer = new MutationObserver(function () {
+    scrollChatToBottom();
+});
+
+observer.observe(document.getElementById("chat-window"), { childList: true, subtree: true });
+</script>
+</body>
+</html>
